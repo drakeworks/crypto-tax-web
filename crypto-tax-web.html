@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Tax Tracking Spreadsheet - Pro Edition</title>
+    <title>Crypto Tax Tracking Spreadsheet</title>
     <style>
         * {
             margin: 0;
@@ -846,6 +846,11 @@
                 Add New Transaction
             </div>
             
+            <div id="networkFeeInfo" class="info-box" style="display: none; margin-bottom: 20px; border-left-color: var(--accent-yellow);">
+                <h4 style="color: var(--accent-yellow);">⚠️ Network Fee Tax Implications</h4>
+                <p>When you pay network fees in cryptocurrency (e.g., ETH gas for USDT transfers), this creates a taxable disposal event for the fee currency. The tracker will automatically record this as a separate disposal transaction.</p>
+            </div>
+            
             <div class="form-group">
                 <label>Date</label>
                 <input type="date" id="txDate" required>
@@ -864,6 +869,8 @@
                     <option value="Gift Received">Gift Received</option>
                     <option value="Gift Given">Gift Given</option>
                     <option value="Transfer">Transfer (Non-Taxable)</option>
+                    <option value="Transfer Out">Transfer Out (With Network Fee)</option>
+                    <option value="Network Fee">Network Fee (Fee Only)</option>
                 </select>
             </div>
 
@@ -872,6 +879,9 @@
                 <select id="txCoin">
                     <option value="BTC">Bitcoin (BTC)</option>
                     <option value="ETH">Ethereum (ETH)</option>
+                    <option value="USDT">Tether (USDT)</option>
+                    <option value="USDC">USD Coin (USDC)</option>
+                    <option value="BNB">Binance Coin (BNB)</option>
                     <option value="SOL">Solana (SOL)</option>
                     <option value="ADA">Cardano (ADA)</option>
                     <option value="DOT">Polkadot (DOT)</option>
@@ -880,6 +890,7 @@
                     <option value="AVAX">Avalanche (AVAX)</option>
                     <option value="ATOM">Cosmos (ATOM)</option>
                     <option value="XRP">Ripple (XRP)</option>
+                    <option value="TRX">Tron (TRX)</option>
                 </select>
             </div>
 
@@ -904,12 +915,37 @@
                     <option value="">Select cryptocurrency received</option>
                     <option value="BTC">Bitcoin (BTC)</option>
                     <option value="ETH">Ethereum (ETH)</option>
+                    <option value="USDT">Tether (USDT)</option>
+                    <option value="USDC">USD Coin (USDC)</option>
+                    <option value="BNB">Binance Coin (BNB)</option>
                     <option value="SOL">Solana (SOL)</option>
                     <option value="ADA">Cardano (ADA)</option>
                     <option value="DOT">Polkadot (DOT)</option>
+                    <option value="MATIC">Polygon (MATIC)</option>
                 </select>
                 <label style="margin-top: 12px;">Received Quantity</label>
                 <input type="number" id="txTradeQty" step="0.00000001" placeholder="0.00000000">
+            </div>
+
+            <div class="form-group" id="networkFeeFields" style="display: none;">
+                <label style="color: var(--accent-yellow);">⚠️ Network Fee Currency (e.g., ETH for ERC-20, BNB for BEP-20)</label>
+                <select id="txFeeCoin">
+                    <option value="">Select fee cryptocurrency</option>
+                    <option value="ETH">Ethereum (ETH) - For ERC-20 tokens</option>
+                    <option value="BNB">Binance Coin (BNB) - For BEP-20 tokens</option>
+                    <option value="MATIC">Polygon (MATIC) - For Polygon network</option>
+                    <option value="AVAX">Avalanche (AVAX) - For AVAX C-Chain</option>
+                    <option value="SOL">Solana (SOL) - For SPL tokens</option>
+                    <option value="BTC">Bitcoin (BTC)</option>
+                    <option value="TRX">Tron (TRX) - For TRC-20 tokens</option>
+                </select>
+                <label style="margin-top: 12px;">Network Fee Amount (in fee currency)</label>
+                <input type="number" id="txFeeAmount" step="0.00000001" placeholder="0.00000000">
+                <label style="margin-top: 12px;">Network Fee USD Value</label>
+                <input type="number" id="txFeeUSD" step="0.01" placeholder="0.00">
+                <p style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">
+                    Example: Transferring USDT-ERC20 uses ETH for gas. Enter the ETH amount and its USD value.
+                </p>
             </div>
 
             <div class="form-group">
@@ -952,6 +988,9 @@
             currentPrices: {
                 BTC: 45000,
                 ETH: 2500,
+                USDT: 1.00,
+                USDC: 1.00,
+                BNB: 320,
                 SOL: 100,
                 ADA: 0.50,
                 DOT: 7.50,
@@ -959,7 +998,8 @@
                 LINK: 15,
                 AVAX: 35,
                 ATOM: 10,
-                XRP: 0.60
+                XRP: 0.60,
+                TRX: 0.10
             },
             metadata: {
                 lastModified: new Date().toISOString(),
@@ -1009,11 +1049,39 @@
         function updateFormFields() {
             const type = document.getElementById('txType').value;
             const tradeFields = document.getElementById('tradeFields');
+            const networkFeeFields = document.getElementById('networkFeeFields');
+            const networkFeeInfo = document.getElementById('networkFeeInfo');
+            
+            // Hide all conditional fields first
+            tradeFields.style.display = 'none';
+            networkFeeFields.style.display = 'none';
+            networkFeeInfo.style.display = 'none';
             
             if (type === 'Trade') {
                 tradeFields.style.display = 'block';
+            } else if (type === 'Transfer Out' || type === 'Network Fee') {
+                networkFeeFields.style.display = 'block';
+                networkFeeInfo.style.display = 'block';
+                
+                // For Network Fee only, hide the main coin/quantity fields
+                if (type === 'Network Fee') {
+                    document.getElementById('txCoin').closest('.form-group').style.display = 'none';
+                    document.getElementById('txQuantity').closest('.form-group').style.display = 'none';
+                    document.getElementById('txAmount').closest('.form-group').style.display = 'none';
+                    document.getElementById('txFees').closest('.form-group').style.display = 'none';
+                } else {
+                    // Show them for Transfer Out
+                    document.getElementById('txCoin').closest('.form-group').style.display = 'block';
+                    document.getElementById('txQuantity').closest('.form-group').style.display = 'block';
+                    document.getElementById('txAmount').closest('.form-group').style.display = 'block';
+                    document.getElementById('txFees').closest('.form-group').style.display = 'block';
+                }
             } else {
-                tradeFields.style.display = 'none';
+                // Show all standard fields
+                document.getElementById('txCoin').closest('.form-group').style.display = 'block';
+                document.getElementById('txQuantity').closest('.form-group').style.display = 'block';
+                document.getElementById('txAmount').closest('.form-group').style.display = 'block';
+                document.getElementById('txFees').closest('.form-group').style.display = 'block';
             }
         }
 
@@ -1021,14 +1089,55 @@
         function addTransaction() {
             const date = document.getElementById('txDate').value;
             const type = document.getElementById('txType').value;
+            const exchange = document.getElementById('txExchange').value;
+            const notes = document.getElementById('txNotes').value;
+            
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            // Handle Network Fee only transaction
+            if (type === 'Network Fee') {
+                const feeCoin = document.getElementById('txFeeCoin').value;
+                const feeAmount = parseFloat(document.getElementById('txFeeAmount').value);
+                const feeUSD = parseFloat(document.getElementById('txFeeUSD').value);
+                
+                if (!feeCoin || !feeAmount || !feeUSD) {
+                    alert('Please fill in all network fee fields');
+                    return;
+                }
+                
+                // Create a sell transaction for the network fee
+                const feeTransaction = {
+                    id: appData.transactions.length + 1,
+                    date: date,
+                    timestamp: new Date().toISOString(),
+                    type: 'Network Fee Disposal',
+                    coin: feeCoin,
+                    quantity: feeAmount,
+                    amount: feeUSD,
+                    fees: 0,
+                    perUnit: feeUSD / feeAmount,
+                    exchange: exchange,
+                    notes: 'Network fee: ' + (notes || 'Gas fee')
+                };
+                
+                appData.transactions.push(feeTransaction);
+                processTransaction(feeTransaction);
+                updateAllTables();
+                updateSummary();
+                saveToLocalStorage();
+                closeModal();
+                return;
+            }
+            
             const coin = document.getElementById('txCoin').value;
             const quantity = parseFloat(document.getElementById('txQuantity').value);
             const amount = parseFloat(document.getElementById('txAmount').value);
             const fees = parseFloat(document.getElementById('txFees').value) || 0;
-            const exchange = document.getElementById('txExchange').value;
-            const notes = document.getElementById('txNotes').value;
             
-            if (!date || !quantity || !amount) {
+            if (!coin || !quantity || !amount) {
                 alert('Please fill in all required fields');
                 return;
             }
@@ -1047,7 +1156,36 @@
                 notes: notes
             };
 
-            if (type === 'Trade') {
+            // Handle Transfer Out with network fee
+            if (type === 'Transfer Out') {
+                const feeCoin = document.getElementById('txFeeCoin').value;
+                const feeAmount = parseFloat(document.getElementById('txFeeAmount').value);
+                const feeUSD = parseFloat(document.getElementById('txFeeUSD').value);
+                
+                // Add the transfer (non-taxable)
+                transaction.type = 'Transfer';
+                transaction.notes = 'Transfer out: ' + (notes || '');
+                appData.transactions.push(transaction);
+                
+                // If network fee was paid in crypto, create a disposal
+                if (feeCoin && feeAmount && feeUSD) {
+                    const feeTransaction = {
+                        id: appData.transactions.length + 1,
+                        date: date,
+                        timestamp: new Date().toISOString(),
+                        type: 'Network Fee Disposal',
+                        coin: feeCoin,
+                        quantity: feeAmount,
+                        amount: feeUSD,
+                        fees: 0,
+                        perUnit: feeUSD / feeAmount,
+                        exchange: exchange,
+                        notes: `Network fee for ${coin} transfer: ${feeAmount} ${feeCoin}`
+                    };
+                    appData.transactions.push(feeTransaction);
+                    processTransaction(feeTransaction);
+                }
+            } else if (type === 'Trade') {
                 const tradeCoin = document.getElementById('txTradeCoin').value;
                 const tradeQty = parseFloat(document.getElementById('txTradeQty').value);
                 
@@ -1084,7 +1222,8 @@
         // Process transaction for lots and disposals
         function processTransaction(tx) {
             const isAcquisition = ['Buy', 'Income', 'Mining', 'Staking', 'Airdrop', 'Gift Received'].includes(tx.type);
-            const isDisposal = ['Sell', 'Gift Given'].includes(tx.type);
+            const isDisposal = ['Sell', 'Gift Given', 'Network Fee Disposal'].includes(tx.type);
+            const isNonTaxable = ['Transfer', 'Transfer In'].includes(tx.type);
 
             if (isAcquisition) {
                 const lot = {
@@ -1103,7 +1242,7 @@
                 appData.lots.push(lot);
             } else if (isDisposal) {
                 let qtyToSell = tx.quantity;
-                const proceeds = tx.amount - tx.fees;
+                const proceeds = tx.type === 'Network Fee Disposal' ? tx.amount : tx.amount - tx.fees;
                 
                 const availableLots = appData.lots
                     .filter(lot => lot.coin === tx.coin && lot.remaining > 0 && lot.date <= tx.date)
@@ -1135,7 +1274,8 @@
                         costBasis: costBasis,
                         gainLoss: proceedsFromThisLot - costBasis,
                         daysHeld: Math.floor((new Date(tx.date) - new Date(lot.date)) / (1000 * 60 * 60 * 24)),
-                        term: Math.floor((new Date(tx.date) - new Date(lot.date)) / (1000 * 60 * 60 * 24)) > 365 ? 'Long-Term' : 'Short-Term'
+                        term: Math.floor((new Date(tx.date) - new Date(lot.date)) / (1000 * 60 * 60 * 24)) > 365 ? 'Long-Term' : 'Short-Term',
+                        type: tx.type // Track disposal type for reporting
                     };
                     appData.disposals.push(disposal);
                     
@@ -1147,9 +1287,10 @@
                 }
                 
                 if (qtyToSell > 0.00000001) {
-                    alert(`⚠️ Warning: Not enough ${tx.coin} in lots to cover sale of ${tx.quantity.toFixed(8)}.\n\nRemaining unmatched: ${qtyToSell.toFixed(8)}`);
+                    alert(`⚠️ Warning: Not enough ${tx.coin} in lots to cover disposal of ${tx.quantity.toFixed(8)}.\n\nRemaining unmatched: ${qtyToSell.toFixed(8)}\n\nThis might indicate missing purchase transactions.`);
                 }
             }
+            // Non-taxable transfers don't create lots or disposals
         }
 
         // Update all tables
@@ -1175,18 +1316,36 @@
             
             appData.transactions.forEach(tx => {
                 const row = tbody.insertRow();
-                const typeColor = tx.type.includes('Buy') || tx.type.includes('Income') ? 'var(--accent-green)' : 
-                                 tx.type.includes('Sell') ? 'var(--accent-red)' : 'var(--accent-blue)';
+                
+                // Color coding for different transaction types
+                let typeColor = 'var(--text-secondary)';
+                if (tx.type.includes('Buy') || tx.type.includes('Income') || tx.type === 'Mining' || tx.type === 'Staking') {
+                    typeColor = 'var(--accent-green)';
+                } else if (tx.type.includes('Sell') || tx.type === 'Gift Given') {
+                    typeColor = 'var(--accent-red)';
+                } else if (tx.type === 'Network Fee Disposal') {
+                    typeColor = 'var(--accent-yellow)';
+                } else if (tx.type.includes('Transfer')) {
+                    typeColor = 'var(--accent-cyan)';
+                } else {
+                    typeColor = 'var(--accent-blue)';
+                }
+                
+                // Format type display
+                let typeDisplay = tx.type;
+                if (tx.type === 'Network Fee Disposal') {
+                    typeDisplay = '⛽ Network Fee';
+                }
                 
                 row.innerHTML = `
                     <td style="font-weight: bold;">#${tx.id}</td>
                     <td>${tx.date}</td>
-                    <td><span style="color: ${typeColor}; font-weight: 600;">${tx.type}</span></td>
+                    <td><span style="color: ${typeColor}; font-weight: 600;">${typeDisplay}</span></td>
                     <td><span style="font-weight: 600;">${tx.coin}</span></td>
                     <td>${tx.quantity.toFixed(8)}</td>
-                    <td style="font-weight: 600;">$${tx.amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                    <td>$${tx.fees.toFixed(2)}</td>
-                    <td>$${tx.perUnit.toFixed(2)}</td>
+                    <td style="font-weight: 600;">${tx.amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td>${tx.fees.toFixed(2)}</td>
+                    <td>${tx.perUnit.toFixed(2)}</td>
                     <td>${tx.exchange}</td>
                     <td style="color: var(--text-secondary);">${tx.notes || '-'}</td>
                     <td><button onclick="deleteTransaction(${tx.id})" class="danger" style="padding: 6px 12px; font-size: 12px;">Delete</button></td>
